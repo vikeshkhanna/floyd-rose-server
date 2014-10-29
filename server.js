@@ -18,6 +18,7 @@ var io = require('socket.io')(http);
 var client_id = '584bd0dbac1544f8993d080baac71bc0'; // Your client id
 var client_secret = 'cec9975be1d54d9f8a81b51ee5e56d0c'; // Your client secret
 var redirect_uri = 'http://localhost:8888/callback'; // Your redirect uri
+var SECRET = "zeppelin";
 
 app.set('views', './views');
 app.set('view engine', 'ejs');
@@ -37,6 +38,8 @@ app.use(bodyParser.urlencoded());
 /* Connect mongodb */
 mongoose.connect('mongodb://localhost/dj');
 var db = mongoose.connection;
+var ObjectId = mongoose.Types.ObjectId;
+
 db.on('error', console.error.bind(console, 'connection error:'));
 db.once('open', function callback() {
   console.log("DB ready!");
@@ -68,21 +71,32 @@ app.get('/', function(req, res) {
   res.render(__dirname + "/views/index.ejs");
 });
 
-app.get('/login', function(req, res) {
+app.post('/login', function(req, res) {
+  console.log("/login");
+  var id = req.body.id;
 
-  var state = generateRandomString(16);
-  res.cookie(stateKey, state);
+  if (req.headers["x-authentication"] != SECRET) {
+    res.status(401).send("Forbidden");
+    return;
+  }
 
-  // your application requests authorization
-  var scope = 'user-read-private user-read-email playlist-modify-public';
-  res.redirect('https://accounts.spotify.com/authorize?' +
-    querystring.stringify({
-      response_type: 'code',
-      client_id: client_id,
-      scope: scope,
-      redirect_uri: redirect_uri,
-      state: state
-    }));
+  schema.User.findOneAndUpdate({ fbId : id }, {
+    $set : {
+      name : req.body.name,
+      img : req.body.img
+    }
+  }, {
+    upsert : true
+  }, function(err, object) {
+    if (err) {
+      console.log(err);
+      res.status(500).send(err)
+    } else {
+      req.session.user = id;
+      console.log("Logged in : " + object);
+      res.send(object);
+    }
+  });
 });
 
 app.get('/callback', function(req, res) {
@@ -149,8 +163,9 @@ function restrict(req, res, next) {
   if (req.session.user) {
     next();
   } else {
+    console.log("Restricted access!");
     req.session.error = "Access denied!";
-    res.redirect("/");
+    res.redirect("/login");
   } 
 }
 
@@ -187,13 +202,55 @@ app.get("/api/shows", function(req, res) {
 });
 
 app.get("/api/shows/:id/songs", function(req, res) {
-  console.log("/api/show/:id/songs");
+  console.log("/api/shows/:id/songs");
+  var id = req.params.id;
+  console.log(id);
+
   // TODO: Filter the find.
-  schema.Show.find(function(err, shows) {
+  schema.Song.find({show: new ObjectId(id)}).populate('votes').exec(function(err, songs) {
     if (err) {
-      res.send({ status: 500, error: err });
+      res.status(500).send({ status: 500, error: err });
     } else {
-      res.send({ status: 200, shows: shows });
+      res.send({ status: 200, songs: songs });
     }
   });
+});
+
+app.post("/api/song/:id/vote/:vote", restrict, function(req, res) {
+  console.log("/api/vote");
+  var songId = new ObjectId(req.params.id);
+  var userId = req.session.userIdl
+  var vote = req.params.vote;
+
+  // Add to the vote array
+  schema.Vote.update({ song: songId, user: userId },
+    {
+      $set : {
+        vote : vote
+      }
+    }, {
+      upsert : true
+    }, function(err, num, n) {
+      if (err) {
+        res.status(500).send({ status: 500, error: err });
+      } else { 
+        // Find this new object or updated object
+        schema.Vote.findOne( { song: songId, user: userId }, function(err, vote) {
+          if (err) {
+            res.status(500).send({ status: 500, error: err });
+          } else {
+            // Add to the song's votes array
+            schema.Song.update({ _id : songId }, { $addToSet : { votes : new ObjectId(vote._id) }}, function(err, response) {
+              if (err) {
+                res.status(500).send({ status: 500, error: err });
+              } else {
+                res.send({ status: 200, response: response });
+              }
+            });
+          }
+        });
+      }
+    });
+  // Optionally add to array
+  // schema.Song.update({_id : songId, 'votes.user' : { $ne : userId }}, { $push : { "votes" :  newVote }}, true);
 });

@@ -1,0 +1,10 @@
+P(ki < 3 for some i in {1,n}) = union(P(ki < 3)) goes from i=1 to n <= sum(P(ki<3)) from i = 1 to n
+P(ki<3) = Part 1
+sum(P(ki<3)) = n*(Part1)
+
+
+(np - p)*(1-p)@ + (a-b)*
+
+np(1-p)@ - p(1-p)@ + a*sss - b**x
+(a + b + c) - (d + e + f) <= (a + b + c)
+
