@@ -3,11 +3,7 @@ var Schema = mongoose.Schema;
 
 /* User schema  */ 
 var userSchema = Schema({
-  fbId : {
-    type: String,
-    unique : true,
-    index: true 
-  },
+  _id :  { type: String, unique : true, index: true },
   name : String,
   img : String
 },
@@ -18,7 +14,7 @@ var userSchema = Schema({
 /* Show Schema */
 var showSchema = Schema({
   title: String,
-  user: Schema.Types.ObjectId,
+  user: String,
   date: { type: Date, default: Date.now },
   active: Boolean
 }, 
@@ -40,7 +36,7 @@ var songSchema = Schema({
 
 var voteSchema = Schema({
   song : { type : Schema.Types.ObjectId, ref : 'Song' },
-  user : Schema.Types.ObjectId,
+  user : String,
   vote : Number
 }, {
   collection:  'votes'

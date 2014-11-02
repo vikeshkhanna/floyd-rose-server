@@ -80,7 +80,7 @@ app.post('/login', function(req, res) {
     return;
   }
 
-  schema.User.findOneAndUpdate({ fbId : id }, {
+  schema.User.findOneAndUpdate({ _id : id }, {
     $set : {
       name : req.body.name,
       img : req.body.img
@@ -160,7 +160,7 @@ app.get("/main", restrict, function(req, res) {
 
 // Restrict access of pages that require login
 function restrict(req, res, next) {
-  if (req.session.user) {
+  if (req.headers.host.indexOf("localhost") !=-1 || req.session.user) {
     next();
   } else {
     console.log("Restricted access!");
