@@ -219,8 +219,9 @@ app.get("/api/shows/:id/songs", function(req, res) {
 app.post("/api/song/:id/vote/:vote", restrict, function(req, res) {
   console.log("/api/vote");
   var songId = new ObjectId(req.params.id);
-  var userId = req.session.userIdl
+  var userId = req.session.user;
   var vote = req.params.vote;
+  console.log(userId);
 
   // Add to the vote array
   schema.Vote.update({ song: songId, user: userId },
@@ -244,7 +245,14 @@ app.post("/api/song/:id/vote/:vote", restrict, function(req, res) {
               if (err) {
                 res.status(500).send({ status: 500, error: err });
               } else {
-                res.send({ status: 200, response: response });
+                // Return the new song object - Note that this is not done atomically like findAndModify, so this value may be different from what you expect
+                schema.Song.findOne({ _id : songId}).populate('votes').exec(function(err, response) {
+                  if (err) {
+                    res.status(500).send({ status: 500, error: err });
+                  } else {
+                    res.send({ status: 200, response: response });
+                  }
+                });
               }
             });
           }
