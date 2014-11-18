@@ -1,17 +1,146 @@
 <!doctype html>
 <html>
   <head>
-    <title>Example of the Authorization Code flow with Spotify</title>
-    <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+    <title>Orders</title>
+
+    <!-- Bootstrap Core CSS -->
+    <link href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+		<link href="/floyd_rose/static/css/shows.css" rel="stylesheet" type="text/css">
+    <!-- Custom Fonts -->
+
+    <link href="http://fonts.googleapis.com/css?family=Montserrat:400,700" rel="stylesheet" type="text/css">
+    <link href='http://fonts.googleapis.com/css?family=Kaushan+Script' rel='stylesheet' type='text/css'>
+    <link href='http://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link href='http://fonts.googleapis.com/css?family=Roboto+Slab:400,100,300,700' rel='stylesheet' type='text/css'>
+		<link  href="http://fotorama.s3.amazonaws.com/4.6.2/fotorama.css" rel="stylesheet"> <!-- 3 KB -->
+
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+        <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+		<![endif]-->
+
+		<!-- jQuery Version 1.11.0 -->
+    <script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
+    <script src="//code.jquery.com/jquery-migrate-1.2.1.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.0.1/angular.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/moment.js/2.8.3/moment.min.js"></script>
+    <script src="https://cdn.socket.io/socket.io-1.1.0.js"></script>
+
+    <script type="text/javascript">
+			var app = angular.module("AdminShowApp", []);
+
+			app.config(function($httpProvider){
+				delete $httpProvider.defaults.headers.common['X-Requested-With'];
+			});
+
+			var TAB_ALL = 'all';
+			var show = <%- JSON.stringify(show) %>;
+
+      //TODO : setInterval for this to protect against server crash and loss of client_cache
+      // socket.emit('add_client', restaurant.resource_uri);
+
+      var spotifyShowController = app.controller('AdminShowController', ['$scope', '$http', '$timeout', function($scope, $http, $timeout) {
+          $scope.songs = [];
+
+					// Load initial data
+					$http({
+						url : "/floyd_rose/api/shows/" + show._id + "/songs",
+						method: "GET"
+          })
+					.success(function(response, status, headers, config) {
+						$scope.songs = response.songs;
+						
+						// Fire ajax request for image
+						response.songs.forEach(function(song, i, arr) {
+							$http({
+								url : "https://api.spotify.com/v1/tracks/" + song.spotify_id,
+								method : "GET",
+								dataType : "jsonp"
+							})
+							.success(function(response, status, headers, config) {
+								song.img = response.album.images[0].url;
+							})
+							.error(function(response, status, headers, config) {
+								console.log(response);
+							});
+						});
+					})
+          .error(function(response, status, headers, config) {
+            console.log(response);
+					});
+
+					$scope.changeSongStatus = function(song, status) {
+						song.dirty = true;
+
+						$http.post("/floyd_rose/api/shows/" + show._id + "/songs/" + song.spotify_id + "/" + status)
+							.success(function(response, responseStatus, headers, config) {
+									$timeout(function() {
+										song.dirty = false;
+										song.status = status;
+										$scope.$apply();
+									}, 2000);
+							})
+							.error(function(response, status, headers, config) {
+								console.log("Error changing status! Song: " + song.name + ". Error : " + response);	
+							});
+					};
+			}]);
+    </script>
   </head>
 
-  <body>
-    <div class="container">
-      <div id="login">
-        <h1>Floyd Rose</h1>
-        <a href="/login" class="btn btn-primary">Log in with Spotify</a>
+  <body ng-app="AdminShowApp">
+    <div class="navbar-inverse" role="navigation">
+        <div class="container-fluid">
+          <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+              <span class="sr-only">Toggle navigation</span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="#">Floyd Rose: Songs</a>
+          </div>
+          <div class="navbar-collapse collapse">
+            <ul class="nav navbar-nav navbar-right">
+              <li><a href="/business">Dashboard</a></li>
+            </ul>
+            <form class="navbar-form navbar-right">
+              <input type="text" class="form-control" placeholder="Search...">
+            </form>
+          </div>
+        </div>
       </div>
-    </div>
+			<div class="container" ng-controller="AdminShowController" style="margin-top:20px">
+				<h1>Show</h1>
+        <ul class="nav nav-tabs nav-orders" role="tablist">
+        </ul>
+
+        <div class="status-orders">
+          <table class="table" id="orders">
+						<tr>
+							<th></th>
+							<th>Song</th>
+              <th>Added by</th>
+              <th>Votes</th>
+              <th>Status</th>
+            </tr>
+
+						<tr ng-repeat="song in songs | filter : {status:0}" class="song" ng-class="{ 'dirty' : song.dirty }">
+							<td><img class="song-img" ng-src="{{ song.img }}" /></td>
+							<td><h3>{{ song.name }}</h3>{{ song.artist }}</td>
+							<td>{{ song.user.name }}</td>
+							<td class="status"><span class="vote upvote">{{ song.upvotes }}+</span><span class="vote downvote"> {{ song.downvotes }}-</span></td>
+							<td><button class="btn btn-success btn-lg" ng-click="changeSongStatus(song, 1)" ng-disabled = "song.dirty">Accept</button> 
+								<button class="btn btn-danger btn-lg" ng-click="changeSongStatus(song, 2)" ng-disabled = "song.dirty">Reject</button>
+							</td>
+            </tr>
+          </table>
+          <hr />
+        </div>
+      </div>
   </body>
 </html>
-

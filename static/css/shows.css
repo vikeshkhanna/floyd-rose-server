@@ -1,0 +1,29 @@
+.vote {
+	font-size: 36px;
+	font-weight: bold;
+}
+
+.upvote {
+	color: green;
+}
+
+.downvote {
+	color: red;
+}
+
+.song-img {
+	width: 64px;
+	height: 64px;
+}
+
+.table tbody>tr>td {
+	vertical-align: middle;
+}
+
+.song {
+	transition:all linear 0.7s
+}
+
+.song.dirty {
+	background-color: #FFE800 !important;
+}

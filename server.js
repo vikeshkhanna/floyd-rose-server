@@ -6,6 +6,7 @@ var cookieParser = require('cookie-parser');
 var querystring = require('querystring');
 var request = require('request'); // "Request" library
 var schema = require('./schema/models');
+var utils = require('./modules/utils');
 
 var url = require('url');
 
@@ -17,8 +18,14 @@ var io = require('socket.io')(http);
 /* Constants */
 var client_id = '584bd0dbac1544f8993d080baac71bc0'; // Your client id
 var client_secret = 'cec9975be1d54d9f8a81b51ee5e56d0c'; // Your client secret
-var redirect_uri = 'http://localhost:8888/callback'; // Your redirect uri
-var SECRET = "zeppelin";
+var redirect_uri = 'http://vikeshkhanna.webfactional.com/floyd_rose/callback'; // Your redirect uri
+var USER_HEADER = "x-floydrose-user";
+var API_KEY_HEADER = "x-authentication";
+var API_SECRET = "zeppelin";
+var ROOT = "/floyd_rose/";
+
+// Change for localhost
+var PORT = 17907;
 
 app.set('views', './views');
 app.set('view engine', 'ejs');
@@ -36,7 +43,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded());
 
 /* Connect mongodb */
-mongoose.connect('mongodb://localhost/dj');
+mongoose.connect('mongodb://localhost:13579/dj');
 var db = mongoose.connection;
 var ObjectId = mongoose.Types.ObjectId;
 
@@ -44,7 +51,7 @@ db.on('error', console.error.bind(console, 'connection error:'));
 db.once('open', function callback() {
   console.log("DB ready!");
   // Starting the server
-  var server = http.listen(3000, function() {
+  var server = http.listen(PORT, function() {
       console.log("Server is up. Listening on port %d", server.address().port); 
     });
 });
@@ -67,18 +74,25 @@ var generateRandomString = function(length) {
 var stateKey = 'spotify_auth_state';
 
 /* URL Routes */
-app.get('/', function(req, res) {
-  res.render(__dirname + "/views/index.ejs");
+app.get('/show/:id', sessionRestrict, function(req, res) {
+	schema.Show.findOne({ _id : new ObjectId(req.params.id) }, function(err, show) {
+		if (err) {
+			console.log(err);
+			res.status(500).send(err);	
+		} else {
+			res.render(__dirname + "/views/index.ejs", { show: show });
+		}
+	});
 });
 
-app.post('/login', function(req, res) {
+// Debug
+app.get('/', sessionRestrict, function(req, res) {
+		res.redirect("/floyd_rose/show/543da7919624e1586c9cb98f");
+});
+
+app.post('/login', restrict, function(req, res) {
   console.log("/login");
   var id = req.body.id;
-
-  if (req.headers["x-authentication"] != SECRET) {
-    res.status(401).send("Forbidden");
-    return;
-  }
 
   schema.User.findOneAndUpdate({ _id : id }, {
     $set : {
@@ -97,6 +111,23 @@ app.post('/login', function(req, res) {
       res.send(object);
     }
   });
+});
+
+app.get('/spotify/login', function(req, res) {
+	console.log("/spotify/login");
+	var state = generateRandomString(16);
+	res.cookie(stateKey, state);
+
+  // your application requests authorization
+  var scope = 'user-read-private user-read-email playlist-modify-public playlist-modify-private';
+  res.redirect('https://accounts.spotify.com/authorize?' +
+    querystring.stringify({
+      response_type: 'code',
+      client_id: client_id,
+      scope: scope,
+      redirect_uri: redirect_uri,
+      state: state
+    }));
 });
 
 app.get('/callback', function(req, res) {
@@ -142,31 +173,38 @@ app.get('/callback', function(req, res) {
         // use the access token to access the Spotify Web API
         request.get(options, function(error, response, body) {
           // Set session variables
+					console.log(body);
           req.session.user = body;
           req.session.access_token = access_token;
           req.session.refresh_token = refresh_token;
-          console.log(body);
-          console.log(access_token);
-          res.redirect("/main");
+					res.redirect(ROOT);
         });
       }
     });
   }
 });
 
-app.get("/main", restrict, function(req, res) {
-  res.render(__dirname + "/views/main.ejs");
+app.get("/login", function(req, res) {
+	res.render(__dirname + "/views/login.ejs");
 });
 
-// Restrict access of pages that require login
+// Restrict access based on API KEY
 function restrict(req, res, next) {
-  if (req.headers.host.indexOf("localhost") !=-1 || req.session.user) {
+  if (req.headers.host.indexOf("localhost") !=-1 || req.header(API_KEY_HEADER) === API_SECRET) {
     next();
   } else {
     console.log("Restricted access!");
-    req.session.error = "Access denied!";
-    res.redirect("/login");
+		res.status(500).send("Wrong API Key");
   } 
+}
+
+function sessionRestrict(req, res, next) {
+	if (req.session.user) {
+		next();
+	} else {
+		console.log("Restricted spotify access!");
+		res.redirect(ROOT + "spotify/login");
+	}
 }
 
 /* Realtime */
@@ -204,22 +242,124 @@ app.get("/api/shows", function(req, res) {
 app.get("/api/shows/:id/songs", function(req, res) {
   console.log("/api/shows/:id/songs");
   var id = req.params.id;
-  console.log(id);
 
   // TODO: Filter the find.
-  schema.Song.find({show: new ObjectId(id)}).populate('votes').exec(function(err, songs) {
+  schema.Song.find({show: new ObjectId(id), status : 0 }).lean().populate('user').populate('votes').exec(function(err, songs) {
     if (err) {
       res.status(500).send({ status: 500, error: err });
     } else {
+
+			// Order the songs
+			for (var i = 0; i < songs.length; i++) {
+				var upvoteCount = 0;
+				var downvoteCount = 0;
+				var votes = songs[i].votes;
+
+				votes.forEach(function(vote, j, arr2) {
+					upvoteCount += (vote.vote === 1 ? 1 : 0);
+					downvoteCount += (vote.vote === -1 ? 1 : 0);
+				});
+
+				songs[i].upvotes = upvoteCount;
+				songs[i].downvotes = downvoteCount;
+			}
+
+			songs.sort(function(song1, song2) {
+				var voteDiff = (song2.upvotes - song2.downvotes) - (song1.upvotes - song1.downvotes);
+
+				if (voteDiff === 0) {
+					return song2.time_added - song1.time_added;
+				}
+				return voteDiff;
+			});
       res.send({ status: 200, songs: songs });
     }
   });
 });
 
+/*
+ * Update the status of the track
+ */
+app.post("/api/shows/:showid/songs/:songid/:status", sessionRestrict, function(req, res) {
+		var showid = new ObjectId(req.params.showid);
+		var songid = req.params.songid;
+		var status = parseInt(req.params.status);
+
+		schema.Show.findOne({ _id : showid }, function(err, show) {
+			if (err) {
+				res.status(500).send(err);
+				return;
+			}
+
+			var uris = encodeURIComponent("spotify:track:" + songid);
+			var addTrackUrl = "https://api.spotify.com/v1/users/" + req.session.user.id + "/playlists/" + show.spotify_playlist_id + "/tracks?uris=" + uris;
+
+			var updateStatus = function(status) {
+				schema.Song.update({ show : showid, spotify_id : songid, status : 0 }, 
+						{
+							$set : {
+								status : status
+							}
+						}, function(err, response) {
+								if (err) {
+									res.status(500).send(err);
+								} 
+								console.log("Successfully changed status for song " + songid);
+								res.send(200);
+					});
+			};
+
+			// Spotify Web API - Add song to playlist
+			if (status === 1) {
+				request({
+					url : addTrackUrl,
+					headers : {
+						"Authorization" : "Bearer " + req.session.access_token,
+						"Accept" : "application/json"
+					},
+					method : 'POST'
+				}, function(error, response, data) {
+					if (error) {
+						console.log(error);
+						res.status(500).send(error);
+						return;
+					}
+					// If song added to spotify, update our model
+					updateStatus(status);
+				});
+			} else {
+				// If rejected, update status directly
+				updateStatus(status);
+			}
+		});
+});
+
+app.post("/api/shows/:id/songs", restrict, function(req, res) {
+		console.log("POST /api/shows/:id/songs");
+		var showId = new ObjectId(req.params.id);
+		var song = req.body;
+		var userId = req.header(USER_HEADER);
+		// Inject user property
+		song.user = userId;
+	
+		schema.Song.update(
+			{ show : showId, spotify_id : song.spotify_id },
+			{ $setOnInsert : song },
+			{ upsert : true },
+			function(err, numAffected) {
+				if (err) {
+					console.log(err);
+					res.status(500).send(err);
+					return;
+				}
+				res.send(numAffected.toString());
+			});
+});
+
 app.post("/api/song/:id/vote/:vote", restrict, function(req, res) {
   console.log("/api/vote");
   var songId = new ObjectId(req.params.id);
-  var userId = req.session.user;
+  var userId = req.header(USER_HEADER);
   var vote = req.params.vote;
   console.log(userId);
 
