@@ -1,9 +1,14 @@
-module.exports.clone = function(obj) {
-    if (null == obj || "object" != typeof obj) return obj;
-    var copy = {};
+module.exports.getSongWithVoteCounts = function(song) {
+	var votes = song.votes;
+	var upvoteCount = 0;
+	var downvoteCount = 0;
 
-    for (var attr in obj) {
-        if (obj.hasOwnProperty(attr)) copy[attr] = Utils.clone(obj[attr]);
-    }
-    return copy;
+	votes.forEach(function(vote, j, arr2) {
+		upvoteCount += (vote.vote === 1 ? 1 : 0);
+		downvoteCount += (vote.vote === -1 ? 1 : 0);
+	});
+
+	song.upvotes = upvoteCount;
+	song.downvotes = downvoteCount;
+	return song;
 }

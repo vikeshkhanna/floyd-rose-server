@@ -2,7 +2,7 @@ var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
 
 /* Facebook User schema  */ 
-var userSchema = Schema({
+var userSchema = new Schema({
   _id :  { type: String, unique : true, index: true },
   name : String,
   img : String
@@ -12,7 +12,7 @@ var userSchema = Schema({
 });
 
 /* Spotify User schema  */ 
-var adminUserSchema = Schema({
+var adminUserSchema = new Schema({
   _id :  { type: String, unique : true, index: true },
   name : String,
   img : String
@@ -22,7 +22,7 @@ var adminUserSchema = Schema({
 });
 
 /* Show Schema */
-var showSchema = Schema({
+var showSchema = new Schema({
   title: String,
   user: { type: String, index: true, ref : 'AdminUser'},
 	spotify_playlist_id : String,
@@ -33,7 +33,7 @@ var showSchema = Schema({
   collection : 'shows'
 });
 
-var songSchema = Schema({
+var songSchema = new Schema({
   show : Schema.Types.ObjectId,
 	spotify_id : { type: String, unique: true, index: true},
   spotify_uri : String,
@@ -49,13 +49,21 @@ var songSchema = Schema({
   collection : 'songs'    
 });
 
-var voteSchema = Schema({
+var voteSchema = new Schema({
 	song : { type : String, ref : 'Song'} ,
   user : { type: String, ref: 'User'},
   time_modified : { type: Date, default: Date.now },
   vote : Number
 }, {
   collection:  'votes'
+});
+
+/* Helper methods on schemas */
+songSchema.pre('save', function(next) {
+	if (!this.status) {
+		this.status = 0;
+	}
+	next();
 });
 
 module.exports.Show = mongoose.model('Show', showSchema);

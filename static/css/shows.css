@@ -24,6 +24,15 @@
 	transition:all linear 0.7s
 }
 
-.song.dirty {
+.song.dirty1 {
+	background-color: #19D400 !important;
+}
+
+.song.dirty0 {
 	background-color: #FFE800 !important;
 }
+
+.song.dirty2 {
+	background-color: #FF7A7A !important;
+}
+

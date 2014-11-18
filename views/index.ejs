@@ -75,6 +75,7 @@
 
 					$scope.changeSongStatus = function(song, status) {
 						song.dirty = true;
+						song.dirtyClass = "dirty" + status;
 
 						$http.post("/floyd_rose/api/shows/" + show._id + "/songs/" + song.spotify_id + "/" + status)
 							.success(function(response, responseStatus, headers, config) {
@@ -82,7 +83,7 @@
 										song.dirty = false;
 										song.status = status;
 										$scope.$apply();
-									}, 2000);
+									}, 1000);
 							})
 							.error(function(response, status, headers, config) {
 								console.log("Error changing status! Song: " + song.name + ". Error : " + response);	
@@ -129,7 +130,7 @@
               <th>Status</th>
             </tr>
 
-						<tr ng-repeat="song in songs | filter : {status:0}" class="song" ng-class="{ 'dirty' : song.dirty }">
+						<tr ng-repeat="song in songs | filter : {status:0}" class="song" ng-class="song.dirtyClass">
 							<td><img class="song-img" ng-src="{{ song.img }}" /></td>
 							<td><h3>{{ song.name }}</h3>{{ song.artist }}</td>
 							<td>{{ song.user.name }}</td>

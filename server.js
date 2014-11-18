@@ -251,17 +251,7 @@ app.get("/api/shows/:id/songs", function(req, res) {
 
 			// Order the songs
 			for (var i = 0; i < songs.length; i++) {
-				var upvoteCount = 0;
-				var downvoteCount = 0;
-				var votes = songs[i].votes;
-
-				votes.forEach(function(vote, j, arr2) {
-					upvoteCount += (vote.vote === 1 ? 1 : 0);
-					downvoteCount += (vote.vote === -1 ? 1 : 0);
-				});
-
-				songs[i].upvotes = upvoteCount;
-				songs[i].downvotes = downvoteCount;
+				songs[i] = utils.getSongWithVoteCounts(songs[i]);
 			}
 
 			songs.sort(function(song1, song2) {
@@ -334,6 +324,9 @@ app.post("/api/shows/:showid/songs/:songid/:status", sessionRestrict, function(r
 		});
 });
 
+/*
+ * POST a new song
+ */
 app.post("/api/shows/:id/songs", restrict, function(req, res) {
 		console.log("POST /api/shows/:id/songs");
 		var showId = new ObjectId(req.params.id);
@@ -341,7 +334,10 @@ app.post("/api/shows/:id/songs", restrict, function(req, res) {
 		var userId = req.header(USER_HEADER);
 		// Inject user property
 		song.user = userId;
+		// Queued by default
+		song.status = 0;
 	
+		// TODO; move to insert, instead of update
 		schema.Song.update(
 			{ show : showId, spotify_id : song.spotify_id },
 			{ $setOnInsert : song },
@@ -356,6 +352,9 @@ app.post("/api/shows/:id/songs", restrict, function(req, res) {
 			});
 });
 
+/*
+ * Vote on a song.
+ */
 app.post("/api/song/:id/vote/:vote", restrict, function(req, res) {
   console.log("/api/vote");
   var songId = new ObjectId(req.params.id);
@@ -386,11 +385,11 @@ app.post("/api/song/:id/vote/:vote", restrict, function(req, res) {
                 res.status(500).send({ status: 500, error: err });
               } else {
                 // Return the new song object - Note that this is not done atomically like findAndModify, so this value may be different from what you expect
-                schema.Song.findOne({ _id : songId}).populate('votes').exec(function(err, response) {
+                schema.Song.findOne({ _id : songId}).lean().populate('votes').exec(function(err, song) {
                   if (err) {
                     res.status(500).send({ status: 500, error: err });
                   } else {
-                    res.send({ status: 200, response: response });
+                    res.send({ status: 200, response: utils.getSongWithVoteCounts(song) });
                   }
                 });
               }
